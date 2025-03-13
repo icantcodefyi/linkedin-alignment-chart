@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "bun test",
-    "deploy": "bun run build && bun vercel --prod"
+    "deploy": "bun vercel --prod"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
