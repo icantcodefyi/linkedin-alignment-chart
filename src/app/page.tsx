@@ -650,7 +650,7 @@ export default function AlignmentChart() {
             >
               rauchg
             </a>
-            ; forked by{" "}
+            ; magic ai version by{" "}
             <a
               href="https://x.com/vishyfishy2/status/1899929030620598508"
               className="underline hover:text-purple-500 transition-colors"
