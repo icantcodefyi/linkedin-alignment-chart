@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Sparkles, Lock, Dices } from "lucide-react";
+import { X, Sparkles, Lock, Dices, GithubIcon } from "lucide-react";
 import { analyseUser, type AlignmentAnalysis } from "./actions/analyze-tweets";
 import {
   Tooltip,
@@ -633,8 +633,14 @@ export default function AlignmentChart() {
             </div>
           </Card>
         </div>
-        <span className="text-center text-sm max-sm:flex max-sm:flex-col max-sm:items-center">
-          <span className="font-medium text-purple-500">dub.sh/xchart</span>
+        <span className="text-center text-sm max-sm:flex max-sm:flex-col max-sm:items-center inline-flex items-center gap-1.5">
+          <a
+            className="flex items-center gap-1 font-medium text-purple-500"
+            href="https://git.new/xchart"
+          >
+            <GithubIcon className="w-4 h-4" />
+            <span>dub.sh/xchart</span>
+          </a>
           <span className="max-sm:hidden"> • </span>
           <span className="text-gray-500 max-sm:text-xs">
             original by{" "}
