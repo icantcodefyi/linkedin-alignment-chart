@@ -1,0 +1,21 @@
+<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#E8E6F0" />
+            <stop offset="100%" stop-color="#D8D0E6" />
+        </linearGradient>
+        <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#9F8FC0" stroke-width="1" />
+        </pattern>
+        <filter id="shine" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur" />
+            <feSpecularLighting in="blur" surfaceScale="8" specularConstant="1.2" specularExponent="25" lighting-color="#B79DFF" result="specOut">
+                <fePointLight x="100" y="100" z="120" />
+            </feSpecularLighting>
+            <feComposite in="specOut" in2="SourceAlpha" operator="in" result="specOut" />
+            <feComposite in="SourceGraphic" in2="specOut" operator="arithmetic" k1="0" k2="1" k3="1.5" k4="0" />
+        </filter>
+    </defs>
+    <rect width="100" height="100" fill="url(#purpleGradient)" />
+    <rect width="100" height="100" fill="url(#grid)" filter="url(#shine)" />
+</svg>

@@ -17,9 +17,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AnalysisPanel } from "./components/analysis-panel";
-import { ScrollArea } from "@radix-ui/react-scroll-area";
-import { Separator } from "@radix-ui/react-separator";
 import { toast } from "sonner";
+import { getRandomPosition } from "@/lib/utils";
+import { getBestAvatarUrl } from "@/lib/load-avatar";
 
 interface Position {
   x: number;
@@ -46,12 +46,11 @@ export default function AlignmentChart() {
   const chartRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [imageSize, setImageSize] = useState(60); // Default size, will be updated based on chart width
+  const [imageSize, setImageSize] = useState(60);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const [isMobile, setIsMobile] = useState(false);
   const [newAnalysisId, setNewAnalysisId] = useState<string | null>(null);
 
-  // Detect mobile devices
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -65,10 +64,8 @@ export default function AlignmentChart() {
     };
   }, []);
 
-  // Prevent scrolling on mobile
   useEffect(() => {
     const handleTouchMove = (e: TouchEvent) => {
-      // Only prevent default if we're not in an input field
       if (
         e.target instanceof HTMLElement &&
         e.target.tagName !== "INPUT" &&
@@ -80,7 +77,6 @@ export default function AlignmentChart() {
 
     document.addEventListener("touchmove", handleTouchMove, { passive: false });
 
-    // Set body overflow to hidden
     document.body.style.overflow = "hidden";
 
     return () => {
@@ -89,39 +85,32 @@ export default function AlignmentChart() {
     };
   }, []);
 
-  // Update chart size to fit the screen
   useEffect(() => {
     const updateChartSize = () => {
       if (containerRef.current && chartRef.current) {
-        // Get viewport dimensions
         const viewportHeight = window.innerHeight;
         const viewportWidth = window.innerWidth;
         const isMobileView = viewportWidth < 768;
 
-        // Reserve space for input and padding (adjusted for mobile)
         const reservedVerticalSpace = isMobileView ? 120 : 140;
-        const topPadding = isMobileView ? 20 : 0; // Add top padding for mobile
+        const topPadding = isMobileView ? 20 : 0;
         const availableHeight =
           viewportHeight - reservedVerticalSpace - topPadding;
 
-        // Calculate available width (with padding)
         const horizontalPadding = isMobileView
-          ? Math.max(40, viewportWidth * 0.1) // More padding on mobile: at least 50px or 10% of viewport
-          : Math.max(20, viewportWidth * 0.05); // Desktop: at least 20px or 5% of viewport
+          ? Math.max(40, viewportWidth * 0.1)
+          : Math.max(20, viewportWidth * 0.05);
         const availableWidth = viewportWidth - horizontalPadding * 2;
 
-        // Determine chart size (square but constrained by available space)
-        const size = Math.min(availableWidth, availableHeight);
+        const size = Math.min(availableWidth, availableHeight); //constrained square
 
         setChartSize({ width: size, height: size });
 
-        // Update image size based on new chart dimensions
         const newImageSize = Math.max(40, Math.min(80, size / 7.5));
         setImageSize(newImageSize);
       }
     };
 
-    // Set up ResizeObserver to monitor container size changes
     if (containerRef.current) {
       const resizeObserver = new ResizeObserver(() => {
         updateChartSize();
@@ -129,7 +118,6 @@ export default function AlignmentChart() {
 
       resizeObserver.observe(containerRef.current);
 
-      // Initial size calculation
       updateChartSize();
 
       return () => {
@@ -140,56 +128,19 @@ export default function AlignmentChart() {
       };
     }
 
-    // Fallback for window resize
     window.addEventListener("resize", updateChartSize);
     return () => window.removeEventListener("resize", updateChartSize);
   }, []);
 
-  // Convert alignment scores to chart position (using percentages)
   const alignmentToPosition = (analysis: AlignmentAnalysis): Position => {
-    // Convert from -100 to 100 scale to percentage coordinates (0% to 100%)
     const xPercent = ((analysis.lawfulChaotic + 100) / 200) * 100;
     const yPercent = ((analysis.goodEvil + 100) / 200) * 100;
 
     return { x: xPercent, y: yPercent };
   };
 
-  // Generate random position within chart bounds (using percentages)
-  const getRandomPosition = () => {
-    // Generate random coordinates as percentages (with some padding)
-    const padding = 10; // 10% padding from edges
-    const x = Math.random() * (100 - 2 * padding) + padding;
-    const y = Math.random() * (100 - 2 * padding) + padding;
-
-    return { x, y };
-  };
-
-  // Function to load an image and return a promise
-  const loadImage = (url: string): Promise<HTMLImageElement> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-
-      const timeout = setTimeout(() => {
-        reject(new Error("Image load timeout"));
-      }, 5000);
-
-      img.onload = () => {
-        clearTimeout(timeout);
-        resolve(img);
-      };
-
-      img.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error("Image load error"));
-      };
-
-      img.src = url;
-    });
-  };
-
   // Generate a profile image when a username is submitted
-  const handleAddImage = async () => {
+  const handleRandomAnalyze = async () => {
     if (!username.trim()) return;
 
     if (!hasDoneFirstRandomPlace.current) {
@@ -202,21 +153,13 @@ export default function AlignmentChart() {
       return;
     }
 
-    // Clean the username (remove @ if user already included it)
     const cleanUsername = username.trim().replace(/^@/, "");
-
-    // Get random position for the new image
     const randomPosition = getRandomPosition();
 
-    // Try both URL formats
-    const withAtUrl = `https://unavatar.io/x/@${cleanUsername}`;
-    const withoutAtUrl = `https://unavatar.io/x/${cleanUsername}`;
-
-    // Create a temporary image with loading state
     const tempImageId = `image-${Date.now()}`;
     const tempImage: ImageItem = {
       id: tempImageId,
-      src: withoutAtUrl,
+      src: `https://unavatar.io/x/${cleanUsername}`, // Default initial URL
       position: randomPosition,
       isDragging: false,
       loading: true,
@@ -228,134 +171,9 @@ export default function AlignmentChart() {
     setImages((prev) => [...prev, tempImage]);
     setUsername("");
 
-    // Default to without @ URL
-    let finalUrl = withoutAtUrl;
-
-    // Create an invisible div to hold the images for analysis
-    const analysisDiv = document.createElement("div");
-    analysisDiv.style.position = "absolute";
-    analysisDiv.style.visibility = "hidden";
-    analysisDiv.style.pointerEvents = "none";
-    document.body.appendChild(analysisDiv);
-
     try {
-      // Try to load both images
-      const withAtImg = document.createElement("img");
-      const withoutAtImg = document.createElement("img");
+      const finalUrl = await getBestAvatarUrl(cleanUsername);
 
-      withAtImg.crossOrigin = "anonymous";
-      withoutAtImg.crossOrigin = "anonymous";
-
-      // Set up load handlers
-      const withAtPromise = new Promise<void>((resolve) => {
-        withAtImg.onload = () => resolve();
-        withAtImg.onerror = () => resolve(); // Resolve even on error
-        setTimeout(() => resolve(), 3000); // Timeout fallback
-      });
-
-      const withoutAtPromise = new Promise<void>((resolve) => {
-        withoutAtImg.onload = () => resolve();
-        withoutAtImg.onerror = () => resolve(); // Resolve even on error
-        setTimeout(() => resolve(), 3000); // Timeout fallback
-      });
-
-      // Start loading both images
-      withAtImg.src = withAtUrl;
-      withoutAtImg.src = withoutAtUrl;
-
-      // Add images to the analysis div
-      analysisDiv.appendChild(withAtImg);
-      analysisDiv.appendChild(withoutAtImg);
-
-      // Wait for both images to load or timeout
-      await Promise.all([withAtPromise, withoutAtPromise]);
-
-      // Create canvases for analysis
-      const withAtCanvas = document.createElement("canvas");
-      const withoutAtCanvas = document.createElement("canvas");
-
-      // Function to safely analyze an image by counting unique colors
-      const analyzeColorfulness = (
-        img: HTMLImageElement,
-        canvas: HTMLCanvasElement
-      ): number => {
-        try {
-          if (!img.complete || img.naturalWidth === 0) {
-            return 0; // Image didn't load properly
-          }
-
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return 0;
-
-          // Set canvas size
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-
-          // Draw image on canvas
-          ctx.drawImage(img, 0, 0);
-
-          // Sample pixels to count unique colors
-          const sampleSize = 20; // Increase sample size for better coverage
-          const uniqueColors = new Set<string>();
-
-          for (let y = 0; y < sampleSize; y++) {
-            for (let x = 0; x < sampleSize; x++) {
-              const sampleX = Math.floor((x / sampleSize) * canvas.width);
-              const sampleY = Math.floor((y / sampleSize) * canvas.height);
-
-              try {
-                const data = ctx.getImageData(sampleX, sampleY, 1, 1).data;
-                const r = data[0];
-                const g = data[1];
-                const b = data[2];
-
-                // Create a string representation of the color
-                const colorKey = `${r},${g},${b}`;
-                uniqueColors.add(colorKey);
-              } catch (error) {
-                // Ignore errors for individual pixels
-              }
-            }
-          }
-
-          // Return the number of unique colors found
-          return uniqueColors.size;
-        } catch (error) {
-          // If any error occurs, return 0
-          return 0;
-        }
-      };
-
-      // Analyze both images
-      const withAtColorfulness = analyzeColorfulness(withAtImg, withAtCanvas);
-      const withoutAtColorfulness = analyzeColorfulness(
-        withoutAtImg,
-        withoutAtCanvas
-      );
-
-      console.log("Unique colors count:", {
-        withAt: withAtColorfulness,
-        withoutAt: withoutAtColorfulness,
-      });
-
-      // Choose the image with more unique colors
-      if (withAtColorfulness > withoutAtColorfulness) {
-        finalUrl = withAtUrl;
-        console.log("Using with @ URL (more unique colors)");
-      } else {
-        finalUrl = withoutAtUrl;
-        console.log("Using without @ URL (more unique colors or equal)");
-      }
-    } catch (error) {
-      console.error("Error analyzing images:", error);
-      // On error, use the default URL
-    } finally {
-      // Clean up
-      if (analysisDiv && analysisDiv.parentNode) {
-        document.body.removeChild(analysisDiv);
-      }
-
-      // Update the image with the final URL
       setImages((prev) =>
         prev.map((img) =>
           img.id === tempImageId
@@ -363,24 +181,29 @@ export default function AlignmentChart() {
             : img
         )
       );
+    } catch (error) {
+      console.error("Error loading profile image:", error);
+
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === tempImageId ? { ...img, loading: false } : img
+        )
+      );
     }
   };
 
-  // Auto-analyze and place the image based on tweets
   const handleAutoAnalyze = async () => {
     if (!username.trim()) return;
 
     setIsAnalyzing(true);
 
-    // Clean the username (remove @ if user already included it)
     const cleanUsername = username.trim().replace(/^@/, "");
 
     try {
-      // Create a temporary image with loading state
       const tempImageId = `image-${Date.now()}`;
       const tempImage: ImageItem = {
         id: tempImageId,
-        src: `/placeholder.svg?height=100&width=100&text=Analyzing...`,
+        src: `/grid.svg?height=100&width=100&text=Analyzing...`,
         position: getRandomPosition(),
         isDragging: false,
         loading: true,
@@ -392,35 +215,11 @@ export default function AlignmentChart() {
       setImages((prev) => [...prev, tempImage]);
       setUsername("");
 
-      // Analyze the tweets
       const analysis = await analyseUser(cleanUsername);
-
-      // Determine the position based on the analysis
       const position = alignmentToPosition(analysis);
 
-      // Get the profile image URL
-      const withAtUrl = `https://unavatar.io/x/@${cleanUsername}`;
-      const withoutAtUrl = `https://unavatar.io/x/${cleanUsername}`;
+      const finalUrl = await getBestAvatarUrl(cleanUsername);
 
-      // Default to without @ URL
-      let finalUrl = withoutAtUrl;
-
-      // Try to load both images to determine which one is better
-      try {
-        const withAtImg = await loadImage(withAtUrl).catch(() => null);
-        const withoutAtImg = await loadImage(withoutAtUrl).catch(() => null);
-
-        if (withAtImg && !withoutAtImg) {
-          finalUrl = withAtUrl;
-        } else if (!withAtImg && withoutAtImg) {
-          finalUrl = withoutAtUrl;
-        }
-        // If both loaded or both failed, use the default (withoutAtUrl)
-      } catch (error) {
-        console.error("Error loading profile images:", error);
-      }
-
-      // Update the image with the final URL, position, and analysis
       setImages((prev) =>
         prev.map((img) =>
           img.id === tempImageId
@@ -437,74 +236,55 @@ export default function AlignmentChart() {
         )
       );
 
-      // Set the new analysis ID to trigger notification
       setNewAnalysisId(tempImageId);
 
-      // Clear the new analysis ID after a delay
       setTimeout(() => {
         setNewAnalysisId(null);
       }, 5000);
     } catch (error) {
       console.error("Error auto-analyzing:", error);
 
-      // Remove the temporary image on error
       setImages((prev) => prev.filter((img) => img.username !== cleanUsername));
 
-      // Show error message
-      alert(
-        `Error analyzing tweets for @${cleanUsername}: ${
+      toast.error(`Error`, {
+        description: `Couldn't analyze tweets for @${cleanUsername}: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+        }`,
+      });
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // Handle mouse down on an image
   const handleMouseDown = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
 
-    // Find the image
     const image = images.find((img) => img.id === id);
     if (!image || image.loading || image.isAiPlaced) return;
 
-    // Set the image as dragging
     setActiveDragId(id);
-
-    // Update the image state
     setImages(
       images.map((img) => (img.id === id ? { ...img, isDragging: true } : img))
     );
   };
 
-  // Handle touch start on an image (for mobile)
   const handleTouchStart = (e: React.TouchEvent, id: string) => {
-    // Find the image
     const image = images.find((img) => img.id === id);
     if (!image || image.loading || image.isAiPlaced) return;
 
-    // Set the image as dragging
     setActiveDragId(id);
-
-    // Update the image state
     setImages(
       images.map((img) => (img.id === id ? { ...img, isDragging: true } : img))
     );
   };
 
-  // Handle mouse move
   const handleMouseMove = (e: MouseEvent) => {
     if (!activeDragId || !chartRef.current) return;
 
-    // Get the chart bounds
     const chartRect = chartRef.current.getBoundingClientRect();
-
-    // Calculate the new position as percentages
     const x = ((e.clientX - chartRect.left) / chartRect.width) * 100;
     const y = ((e.clientY - chartRect.top) / chartRect.height) * 100;
 
-    // Update the image position
     setImages(
       images.map((img) =>
         img.id === activeDragId
@@ -520,24 +300,15 @@ export default function AlignmentChart() {
     );
   };
 
-  // Handle touch move (for mobile)
   const handleTouchMove = (e: TouchEvent) => {
     if (!activeDragId || !chartRef.current) return;
-
-    // Prevent default to stop scrolling while dragging
     e.preventDefault();
 
-    // Get the first touch
     const touch = e.touches[0];
-
-    // Get the chart bounds
     const chartRect = chartRef.current.getBoundingClientRect();
-
-    // Calculate the new position as percentages
     const x = ((touch.clientX - chartRect.left) / chartRect.width) * 100;
     const y = ((touch.clientY - chartRect.top) / chartRect.height) * 100;
 
-    // Update the image position
     setImages(
       images.map((img) =>
         img.id === activeDragId
@@ -553,42 +324,34 @@ export default function AlignmentChart() {
     );
   };
 
-  // Handle mouse up
   const handleMouseUp = () => {
     if (!activeDragId) return;
 
-    // Set the image as not dragging
     setImages(
       images.map((img) =>
         img.id === activeDragId ? { ...img, isDragging: false } : img
       )
     );
 
-    // Reset the active drag
     setActiveDragId(null);
   };
 
-  // Handle touch end (for mobile)
   const handleTouchEnd = () => {
     if (!activeDragId) return;
 
-    // Set the image as not dragging
     setImages(
       images.map((img) =>
         img.id === activeDragId ? { ...img, isDragging: false } : img
       )
     );
 
-    // Reset the active drag
     setActiveDragId(null);
   };
 
-  // Remove an image
   const handleRemoveImage = (id: string) => {
     setImages(images.filter((img) => img.id !== id));
   };
 
-  // Add event listeners for mouse/touch move and mouse/touch up
   useEffect(() => {
     if (activeDragId) {
       // Mouse events
@@ -613,7 +376,6 @@ export default function AlignmentChart() {
     };
   }, [activeDragId, images]);
 
-  // Prepare analyses for the panel
   const analysesForPanel = images
     .filter((img) => img.isAiPlaced && img.analysis && !img.loading)
     .map((img) => ({
@@ -656,7 +418,7 @@ export default function AlignmentChart() {
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    onClick={handleAddImage}
+                    onClick={handleRandomAnalyze}
                     size="icon"
                     className="h-7 w-7 rounded-full bg-black hover:bg-black/90 text-white p-0"
                     disabled={!username.trim() || isAnalyzing}
@@ -694,7 +456,6 @@ export default function AlignmentChart() {
         </form>
 
         <div className="relative">
-          {/* Axis Labels */}
           <button
             onClick={() =>
               toast("Good", {
@@ -758,14 +519,12 @@ export default function AlignmentChart() {
                 backgroundSize: "20px 20px",
               }}
             >
-              {/* Axes */}
               <div className="absolute top-0 left-0 w-full h-full">
                 <div className="absolute top-0 left-0 w-full h-full border-b-2 border-r-2 border-black" />
                 <div className="absolute top-1/2 left-0 w-full h-0 border-t-2 border-black" />
                 <div className="absolute top-0 left-1/2 w-0 h-full border-l-2 border-black" />
               </div>
 
-              {/* Draggable Images */}
               {images.map((img) => (
                 <motion.div
                   key={img.id}
@@ -811,7 +570,7 @@ export default function AlignmentChart() {
                     }}
                   >
                     <NextImage
-                      src={img.src || "/placeholder.svg"}
+                      src={img.src || "/grid.svg"}
                       alt={`X avatar for ${img.username || "user"}`}
                       width={100}
                       height={100}
@@ -821,10 +580,9 @@ export default function AlignmentChart() {
                       unoptimized
                     />
 
-                    {/* Loading spinner overlay for AI-placed images */}
                     {img.loading && img.isAiPlaced && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-purple-500 border-r-transparent"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="h-6 w-6 sm:h-8 sm:w-8 animate-spin rounded-full border-4 border-solid border-purple-500 border-r-transparent"></div>
                       </div>
                     )}
 
@@ -849,7 +607,6 @@ export default function AlignmentChart() {
                       </button>
                     )}
 
-                    {/* Lock icon for AI-placed images */}
                     {img.isAiPlaced && !img.loading && (
                       <div className="absolute top-0 left-0 bg-purple-600 text-white rounded-br-md p-1">
                         <Lock
@@ -862,7 +619,6 @@ export default function AlignmentChart() {
                       </div>
                     )}
 
-                    {/* Username tooltip */}
                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity overflow-hidden">
                       @{img.username}
                       {img.isAiPlaced && (
@@ -899,7 +655,6 @@ export default function AlignmentChart() {
         </span>
       </div>
 
-      {/* Analysis Panel */}
       <AnalysisPanel
         analyses={analysesForPanel}
         newAnalysisId={newAnalysisId}
