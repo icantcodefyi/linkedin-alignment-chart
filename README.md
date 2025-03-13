@@ -2,7 +2,7 @@
 
 Create D&D-style alignment charts for X (formerly Twitter) users. Place users on a Lawful-Chaotic and Good-Evil grid based on an AI analysis of their tweets or manually position them. Powered by [Exa](https://exa.ai/) and [Vercel AI SDK](https://sdk.vercel.ai).
 
-Try it here! → [magic-x-alignment-chart.vercel.app](https://magic-x-alignment-chart.vercel.app/)
+Try it here! → [magic-x-alignment-chart.vercel.app](https://dub.sh/xchart/)
 
 https://github.com/user-attachments/assets/2e5e2587-468e-4a77-ac59-742c92f8d58a
 
