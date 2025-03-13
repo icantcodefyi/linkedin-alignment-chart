@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/2e5e2587-468e-4a77-ac59-742c92f8d58a
 
 ## Deploy your own
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ff1shy-dev%2Fx-alignment-chart)
+[![Deploy with Vercel](https://vercel.com/button)]([https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ff1shy-dev%2Fx-alignment-chart](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ff1shy-dev%2Fx-alignment-chart%2F&env=OPENAI_API_KEY,EXA_API_KEY&integration-ids=oac_V3R1GIpkoJorr6fqyiwdhl17))
 
 ## Credits
 
