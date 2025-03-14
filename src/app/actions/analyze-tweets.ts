@@ -7,7 +7,8 @@ import { z } from "zod"
 import { getCachedData, setCachedData } from "../../lib/redis"
 import { fetchTwitterProfile } from "../../lib/fetch-twitter-profile"
 import { logger } from "@/lib/logger"
-
+import { track } from '@vercel/analytics/server';
+import { waitUntil } from "@vercel/functions";
 const AlignmentSchema = z.object({
   explanation: z.string().describe("Your brief-ish explanation/reasoning for the given alignment assessment"),
   lawfulChaotic: z.number().min(-100).max(100).describe("A score from -100 (lawful) to 100 (chaotic)"),
@@ -16,7 +17,7 @@ const AlignmentSchema = z.object({
 
 export type AlignmentAnalysis = z.infer<typeof AlignmentSchema>
 
-export async function analyseUser(username: string): Promise<AlignmentAnalysis> {
+export async function analyseUser(username: string): Promise<AlignmentAnalysis & { cached: boolean; isError: boolean }> {
   const cleanUsername = username.trim().replace(/^@/, "")
   const cacheKey = `analysis-v2:${cleanUsername}`
 
@@ -26,7 +27,13 @@ export async function analyseUser(username: string): Promise<AlignmentAnalysis> 
     if (cachedAnalysis) {
       logger.info(`Using cached analysis for @${cleanUsername}`)
       logger.info(cachedAnalysis)
-      return cachedAnalysis
+
+      waitUntil(track("analysis_cached", {
+        username: cleanUsername,
+        lawful_chaotic: cachedAnalysis.lawfulChaotic,
+        good_evil: cachedAnalysis.goodEvil,
+      }))
+      return { ...cachedAnalysis, cached: true, isError: false }
     }
 
     logger.info(`Analyzing tweets for @${cleanUsername}`)
@@ -94,13 +101,21 @@ ${tweetTexts}
     // Cache for 2 weeks - maybe the users will have more tweets by then...
     await setCachedData(cacheKey, object, 604_800)
 
-    return object
+    waitUntil(track("analysis_complete", {
+      username: cleanUsername,
+      lawful_chaotic: object.lawfulChaotic,
+      good_evil: object.goodEvil,
+    }))
+
+    return { ...object, cached: false, isError: false }
   } catch (error) {
     logger.error(`Error analyzing tweets for @${cleanUsername}:`, error)
     return {
       lawfulChaotic: 0,
       goodEvil: 0,
       explanation: "Error analyzing tweets... Please try again later.",
+      cached: false,
+      isError: true,
     }
   }
 }
