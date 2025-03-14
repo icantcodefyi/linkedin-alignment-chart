@@ -2,13 +2,30 @@
 
 import type React from "react";
 
-import { useState, useRef, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useTransition,
+  startTransition,
+} from "react";
 import NextImage from "next/image";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Sparkles, Lock, Dices, GithubIcon } from "lucide-react";
+import {
+  X,
+  Sparkles,
+  Lock,
+  Dices,
+  GithubIcon,
+  Save,
+  Database,
+  MessageSquare,
+  Trash,
+} from "lucide-react";
 import { analyseUser, type AlignmentAnalysis } from "./actions/analyze-tweets";
 import {
   Tooltip,
@@ -18,15 +35,38 @@ import {
 } from "@/components/ui/tooltip";
 import { AnalysisPanel } from "./components/analysis-panel";
 import { toast } from "sonner";
-import { getRandomPosition } from "@/lib/utils";
+import { cn, getRandomPosition } from "@/lib/utils";
 import { getBestAvatarUrl } from "@/lib/load-avatar";
+import {
+  initIndexedDB,
+  cachePlacementsLocally,
+  loadCachedPlacements,
+  removeCachedPlacement,
+  clearLocalCache,
+  StoredPlacement,
+} from "@/lib/indexed-db";
+import { useDebounce } from "@/hooks/use-debounce";
+import { logger } from "@/lib/logger";
+import {
+  AlertDialogHeader,
+  AlertDialogFooter,
+} from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 
 interface Position {
   x: number;
   y: number;
 }
 
-interface ImageItem {
+export interface Placement {
   id: string;
   src: string;
   position: Position;
@@ -40,9 +80,10 @@ interface ImageItem {
 
 export default function AlignmentChart() {
   const hasDoneFirstRandomPlace = useRef(false);
-  const [images, setImages] = useState<ImageItem[]>([]);
+  const [images, setImages] = useState<Placement[]>([]);
   const [username, setUsername] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const chartRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -50,6 +91,45 @@ export default function AlignmentChart() {
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const [isMobile, setIsMobile] = useState(false);
   const [newAnalysisId, setNewAnalysisId] = useState<string | null>(null);
+
+  const debouncedSave = useDebounce(cachePlacementsLocally, 500);
+
+  useEffect(() => {
+    async function loadCachedUsers() {
+      try {
+        setIsLoading(true);
+        await initIndexedDB();
+        const cachedPlacements = await loadCachedPlacements();
+
+        if (cachedPlacements.length > 0) {
+          const loadedImages: Placement[] = cachedPlacements.map((item) => ({
+            ...item,
+            isDragging: false,
+            loading: false,
+            position: item.position,
+            timestamp: item.timestamp ? new Date(item.timestamp) : new Date(),
+          }));
+
+          setImages(loadedImages);
+          toast.success(`Loaded ${loadedImages.length} saved placements`);
+        }
+      } catch (error) {
+        logger.error("Failed to load users from IndexedDB:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadCachedUsers();
+  }, []);
+
+  // Save users to IndexedDB whenever the images state changes
+  useEffect(() => {
+    if (isLoading) return;
+
+    // Call our debounced save function
+    debouncedSave(images);
+  }, [images, isLoading, debouncedSave]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -157,7 +237,7 @@ export default function AlignmentChart() {
     const randomPosition = getRandomPosition();
 
     const tempImageId = `image-${Date.now()}`;
-    const tempImage: ImageItem = {
+    const tempImage: Placement = {
       id: tempImageId,
       src: `https://unavatar.io/x/${cleanUsername}`, // Default initial URL
       position: randomPosition,
@@ -182,7 +262,7 @@ export default function AlignmentChart() {
         )
       );
     } catch (error) {
-      console.error("Error loading profile image:", error);
+      logger.error("Error loading profile image:", error);
 
       setImages((prev) =>
         prev.map((img) =>
@@ -201,7 +281,7 @@ export default function AlignmentChart() {
 
     try {
       const tempImageId = `image-${Date.now()}`;
-      const tempImage: ImageItem = {
+      const tempImage: Placement = {
         id: tempImageId,
         src: `/grid.svg?height=100&width=100&text=Analyzing...`,
         position: getRandomPosition(),
@@ -242,7 +322,7 @@ export default function AlignmentChart() {
         setNewAnalysisId(null);
       }, 5000);
     } catch (error) {
-      console.error("Error auto-analyzing:", error);
+      logger.error("Error auto-analyzing:", error);
 
       setImages((prev) => prev.filter((img) => img.username !== cleanUsername));
 
@@ -348,8 +428,12 @@ export default function AlignmentChart() {
     setActiveDragId(null);
   };
 
-  const handleRemoveImage = (id: string) => {
+  const handleRemoveImage = async (id: string) => {
     setImages(images.filter((img) => img.id !== id));
+
+    removeCachedPlacement(id).catch((error) => {
+      logger.error("Error removing placement from IndexedDB:", error);
+    });
   };
 
   useEffect(() => {
@@ -661,10 +745,51 @@ export default function AlignmentChart() {
         </span>
       </div>
 
-      <AnalysisPanel
-        analyses={analysesForPanel}
-        newAnalysisId={newAnalysisId}
-      />
+      <AnalysisPanel analyses={analysesForPanel} newAnalysisId={newAnalysisId}>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              size="sm"
+              className="relative group h-12 min-w-12 rounded-full shadow-lg bg-red-500 hover:bg-red-800 transition-all duration-200"
+              disabled={images.length === 0}
+            >
+              <Trash className="!size-5 text-white" />
+              <span className="text-base text-white hidden xs:block">
+                Clear
+              </span>
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will remove {images.length > 1 ? "all of your" : "your"}{" "}
+                {images.length} saved placements from the chart.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async () => {
+                  setImages([]);
+                  clearLocalCache().catch(logger.error);
+                }}
+              >
+                Continue
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </AnalysisPanel>
+
+      {/* {isLoading && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-5 rounded-lg flex flex-col items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-purple-500 border-r-transparent"></div>
+            <p>Loading saved users...</p>
+          </div>
+        </div>
+      )} */}
     </div>
   );
 }
