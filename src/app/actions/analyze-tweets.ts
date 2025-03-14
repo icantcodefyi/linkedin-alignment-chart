@@ -113,7 +113,7 @@ ${tweetTexts}
     return {
       lawfulChaotic: 0,
       goodEvil: 0,
-      explanation: "Error analyzing tweets... Please try again later.",
+      explanation: `Error analyzing tweets for @${cleanUsername}... Check you used a valid username and try again later.`,
       cached: false,
       isError: true,
     }

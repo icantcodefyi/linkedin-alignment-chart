@@ -296,6 +296,18 @@ export default function AlignmentChart() {
       setUsername("");
 
       const analysis = await analyseUser(cleanUsername);
+      if (analysis.isError) {
+        toast.error(`Error`, {
+          description: analysis.explanation,
+          position: "top-right",
+          duration: 4000,
+        });
+
+        setImages((prev) =>
+          prev.filter((img) => img.username !== cleanUsername)
+        );
+        return;
+      }
       const position = alignmentToPosition(analysis);
 
       const finalUrl = await getBestAvatarUrl(cleanUsername);
@@ -330,6 +342,8 @@ export default function AlignmentChart() {
         description: `Couldn't analyze tweets for @${cleanUsername}: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
+        position: "top-right",
+        duration: 4000,
       });
     } finally {
       setIsAnalyzing(false);
