@@ -91,6 +91,7 @@ export default function AlignmentChart() {
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const [isMobile, setIsMobile] = useState(false);
   const [newAnalysisId, setNewAnalysisId] = useState<string | null>(null);
+  const [linkedInUrl, setLinkedInUrl] = useState("");
 
   const debouncedSave = useDebounce(cachePlacementsLocally, 500);
 
@@ -273,11 +274,12 @@ export default function AlignmentChart() {
   };
 
   const handleAutoAnalyze = async () => {
-    if (!username.trim()) return;
+    if (!linkedInUrl.trim()) return;
 
     setIsAnalyzing(true);
 
-    const cleanUsername = username.trim().replace(/^@/, "");
+    const cleanLinkedInUrl = linkedInUrl.trim();
+    const profileId = cleanLinkedInUrl.split('/').pop() || cleanLinkedInUrl;
 
     try {
       const tempImageId = `image-${Date.now()}`;
@@ -287,15 +289,15 @@ export default function AlignmentChart() {
         position: getRandomPosition(),
         isDragging: false,
         loading: true,
-        username: cleanUsername,
+        username: profileId,
         isAiPlaced: true,
         timestamp: new Date(),
       };
 
       setImages((prev) => [...prev, tempImage]);
-      setUsername("");
+      setLinkedInUrl("");
 
-      const analysis = await analyseUser(cleanUsername);
+      const analysis = await analyseUser(cleanLinkedInUrl);
       if (analysis.isError) {
         toast.error(`Error`, {
           description: analysis.explanation,
@@ -304,20 +306,24 @@ export default function AlignmentChart() {
         });
 
         setImages((prev) =>
-          prev.filter((img) => img.username !== cleanUsername)
+          prev.filter((img) => img.username !== profileId)
         );
         return;
       }
       const position = alignmentToPosition(analysis);
 
-      const finalUrl = await getBestAvatarUrl(cleanUsername);
+      // Use author image from LinkedIn if available
+      const authorImage = analysis.authorImage || `/grid.svg?height=100&width=100&text=${profileId.slice(0, 2).toUpperCase()}`;
+      // Use author name if available, otherwise use profile ID
+      const displayName = analysis.authorName || profileId;
 
       setImages((prev) =>
         prev.map((img) =>
           img.id === tempImageId
             ? {
                 ...img,
-                src: finalUrl,
+                src: authorImage,
+                username: displayName,
                 position,
                 loading: false,
                 analysis,
@@ -336,10 +342,10 @@ export default function AlignmentChart() {
     } catch (error) {
       logger.error("Error auto-analyzing:", error);
 
-      setImages((prev) => prev.filter((img) => img.username !== cleanUsername));
+      setImages((prev) => prev.filter((img) => img.username !== profileId));
 
       toast.error(`Error`, {
-        description: `Couldn't analyze tweets for @${cleanUsername}: ${
+        description: `Couldn't analyze LinkedIn profile ${cleanLinkedInUrl}: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
         position: "top-right",
@@ -501,9 +507,9 @@ export default function AlignmentChart() {
           }}
         >
           <Input
-            placeholder="Enter X username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Enter LinkedIn URL"
+            value={linkedInUrl}
+            onChange={(e) => setLinkedInUrl(e.target.value)}
             className="pr-20 rounded-full pl-4"
             autoCapitalize="none"
             spellCheck="false"
@@ -519,7 +525,7 @@ export default function AlignmentChart() {
                     onClick={handleRandomAnalyze}
                     size="icon"
                     className="h-7 w-7 rounded-full bg-black hover:bg-black/90 text-white p-0"
-                    disabled={!username.trim() || isAnalyzing}
+                    disabled={!linkedInUrl.trim() || isAnalyzing}
                   >
                     <Dices className="h-3.5 w-3.5" />
                     <span className="sr-only">Add Image</span>
@@ -539,7 +545,7 @@ export default function AlignmentChart() {
                     size="icon"
                     className="h-7 w-7 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center"
                     onClick={handleAutoAnalyze}
-                    disabled={!username.trim() || isAnalyzing}
+                    disabled={!linkedInUrl.trim() || isAnalyzing}
                   >
                     <Sparkles className="h-3.5 w-3.5" />
                     <span className="sr-only">Auto-Analyze</span>
@@ -669,7 +675,7 @@ export default function AlignmentChart() {
                   >
                     <NextImage
                       src={img.src || "/grid.svg"}
-                      alt={`X avatar for ${img.username || "user"}`}
+                      alt={`LinkedIn profile image for ${img.username || "user"}`}
                       width={100}
                       height={100}
                       className={`object-cover w-full h-full ${
@@ -718,7 +724,7 @@ export default function AlignmentChart() {
                     )}
 
                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs p-1 opacity-0 group-hover:opacity-100 transition-opacity overflow-hidden">
-                      @{img.username}
+                      {img.username}
                       {img.isAiPlaced && (
                         <span className="flex items-center gap-0.5 text-purple-300 text-[10px]">
                           <Sparkles className="h-2 w-2" /> AI Placed
@@ -734,26 +740,26 @@ export default function AlignmentChart() {
         <span className="text-center text-sm max-sm:flex max-sm:flex-col max-sm:items-center inline-flex items-center gap-1.5">
           <a
             className="flex items-center gap-1 font-medium text-purple-500"
-            href="https://git.new/xchart"
+            href="https://git.new/lchart"
           >
             <GithubIcon className="w-4 h-4" />
-            <span>dub.sh/xchart</span>
+            <span>dub.sh/lchart</span>
           </a>
           <span className="max-sm:hidden"> • </span>
           <span className="text-gray-500 max-sm:text-xs">
             original by{" "}
             <a
-              href="https://x.com/rauchg/status/1899895262023467035"
-              className="underline hover:text-purple-500 transition-colors"
-            >
-              rauchg
-            </a>
-            ; magic ai version by{" "}
-            <a
               href="https://x.com/vishyfishy2/status/1899929030620598508"
               className="underline hover:text-purple-500 transition-colors"
             >
               f1shy-dev
+            </a>
+            ; linkedin version by{" "}
+            <a
+              href="https://x.com/icantcodefyi/"
+              className="underline hover:text-purple-500 transition-colors"
+            >
+              aniruddh
             </a>
           </span>
         </span>

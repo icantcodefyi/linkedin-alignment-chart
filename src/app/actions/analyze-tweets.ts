@@ -1,54 +1,75 @@
 "use server"
 import "server-only"
 import { dedent } from "ts-dedent"
-import { openai } from "@ai-sdk/openai"
+import { google } from "@ai-sdk/google"
 import { CoreMessage, generateObject } from "ai"
 import { z } from "zod"
 import { getCachedData, setCachedData } from "../../lib/redis"
-import { fetchTwitterProfile } from "../../lib/fetch-twitter-profile"
+import { fetchLinkedInProfile } from "../../lib/fetch-linkedin-profile"
 import { logger } from "@/lib/logger"
 import { track } from '@vercel/analytics/server';
 import { waitUntil } from "@vercel/functions";
+
 const AlignmentSchema = z.object({
   explanation: z.string().describe("Your brief-ish explanation/reasoning for the given alignment assessment"),
   lawfulChaotic: z.number().min(-100).max(100).describe("A score from -100 (lawful) to 100 (chaotic)"),
   goodEvil: z.number().min(-100).max(100).describe("A score from -100 (good) to 100 (evil)"),
+  authorImage: z.string().optional().describe("URL to the author's profile image"),
+  authorName: z.string().optional().describe("Name of the LinkedIn profile author"),
 });
 
 export type AlignmentAnalysis = z.infer<typeof AlignmentSchema>
 
-export async function analyseUser(username: string): Promise<AlignmentAnalysis & { cached: boolean; isError: boolean }> {
-  const cleanUsername = username.trim().replace(/^@/, "")
-  const cacheKey = `analysis-v2:${cleanUsername}`
+export async function analyseUser(linkedInUrl: string): Promise<AlignmentAnalysis & { cached: boolean; isError: boolean }> {
+  const cleanLinkedInUrl = linkedInUrl.trim()
+  const cacheKey = `analysis-linkedin-v1:${cleanLinkedInUrl}`
 
   try {
     const cachedAnalysis = await getCachedData<AlignmentAnalysis>(cacheKey)
 
     if (cachedAnalysis) {
-      logger.info(`Using cached analysis for @${cleanUsername}`)
+      logger.info(`Using cached analysis for ${cleanLinkedInUrl}`)
       logger.info(cachedAnalysis)
 
       waitUntil(track("analysis_cached", {
-        username: cleanUsername,
+        linkedInUrl: cleanLinkedInUrl,
         lawful_chaotic: cachedAnalysis.lawfulChaotic,
         good_evil: cachedAnalysis.goodEvil,
       }))
       return { ...cachedAnalysis, cached: true, isError: false }
     }
 
-    logger.info(`Analyzing tweets for @${cleanUsername}`)
+    logger.info(`Analyzing LinkedIn posts for ${cleanLinkedInUrl}`)
 
-    const profile = await fetchTwitterProfile(username)
+    const profile = await fetchLinkedInProfile(cleanLinkedInUrl)
+    logger.info(`Profile fetched for ${cleanLinkedInUrl}:`, { 
+      success: !!profile,
+      postsCount: profile?.posts?.length || 0
+    })
+    
     if (!profile) {
-      throw new Error(`No profile found for @${cleanUsername}`)
+      throw new Error(`No profile found for ${cleanLinkedInUrl}`)
     }
 
-    const profile_str = JSON.stringify({ ...profile, tweets: undefined }, null, 2)
+    // Extract author image and name from the first post if available
+    let authorImage: string | undefined
+    let authorName: string | undefined
+    if (profile.posts.length > 0 && profile.posts[0].author) {
+      if (profile.posts[0].author.authorImage) {
+        authorImage = profile.posts[0].author.authorImage
+        logger.info(`Found author image: ${authorImage}`)
+      }
+      if (profile.posts[0].author.authorName) {
+        authorName = profile.posts[0].author.authorName
+        logger.info(`Found author name: ${authorName}`)
+      }
+    }
 
-    const tweetTexts = profile.tweets.map((tweet) =>
-      `<post${tweet.is_quote_status ? " is_quote=\"true\"" : ""}>
-${tweet.text}
-${tweet.favorite_count} likes, ${tweet.reply_count} replies, ${tweet.retweet_count} retweets, ${tweet.quote_count} quotes
+    const postTexts = profile.posts.map((post) =>
+      `<post>
+${post.text}
+${post.reactionsCount} reactions, ${post.commentsCount} comments
+${post.activityDate}
 </post>`
     ).join("\n\n")
 
@@ -56,7 +77,7 @@ ${tweet.favorite_count} likes, ${tweet.reply_count} replies, ${tweet.retweet_cou
       {
         role: "system",
         content: dedent`
-        Analyze the following tweets the given from Twitter user and determine their alignment on a D&D-style alignment chart.
+        Analyze the following posts from the given LinkedIn user and determine their alignment on a D&D-style alignment chart.
         
         For lawful-chaotic axis:
         - Lawful (-100): Follows rules, traditions, and social norms. They value tradition, loyalty, and order.
@@ -68,52 +89,72 @@ ${tweet.favorite_count} likes, ${tweet.reply_count} replies, ${tweet.retweet_cou
         - Neutral (0): Balanced self-interest and concern for others
         - Evil (100): Selfish, manipulative, or harmful to others. Some are motivated by greed, hatred, or lust for power.
         
-        Based only on these tweets, provide a numerical assessment of this user's alignment. Be willing to move to any side/extreme!
+        Based only on these LinkedIn posts, provide a numerical assessment of this user's alignment. Be willing to move to any side/extreme!
 
         Since this is a bit of fun, be willing to overly exaggerate if the user has a specific trait expressed barely - e.g. if they are evil at some point then make sure to express it! - I don't just want everyone to end up as chaotic-neutral in the end... However don't always exaggerate a user's chaotic characteristic, you can also try to exaggerate their lawful or good/evil traits if they are more pronounced. Just be fun with it.
         
-        For the explaination, try to avoid overly waffling - but show your reasoning behind your judgement. You can mention specific things about their user like mentioned traits/remarks or projects/etc - the more personalised the better.
+        For the explanation, try to avoid overly waffling - but show your reasoning behind your judgement. You can mention specific things about their user like mentioned traits/remarks or projects/etc - the more personalised the better.
       `.trim()
       },
       {
         role: "user",
         content:
-          dedent`Username: @${username}
+          dedent`LinkedIn URL: ${linkedInUrl}
 
-<user_profile>
-${profile_str}
-</user_profile>
-
-<user_tweets filter="top_100">
-${tweetTexts}
-</user_tweets>`.trim()
+<user_posts>
+${postTexts}
+</user_posts>`.trim()
       }
     ] satisfies CoreMessage[]
 
 
     const { object } = await generateObject({
-      model: openai("gpt-4o-mini"),
+      model: google("gemini-2.0-flash"),
       temperature: 0.8,
       schema: AlignmentSchema,
       messages
     })
 
-    // Cache for 2 weeks - maybe the users will have more tweets by then...
-    await setCachedData(cacheKey, object, 604_800)
+    // Add the author image and name to the analysis
+    const analysisWithImage = {
+      ...object,
+      authorImage,
+      authorName
+    }
+
+    // Cache for 2 weeks
+    await setCachedData(cacheKey, analysisWithImage, 604_800)
 
     waitUntil(track("analysis_complete", {
-      username: cleanUsername,
+      linkedInUrl: cleanLinkedInUrl,
       lawful_chaotic: object.lawfulChaotic,
       good_evil: object.goodEvil,
     }))
 
-    return { ...object, cached: false, isError: false }
+    return { ...analysisWithImage, cached: false, isError: false }
   } catch (error) {
-    logger.error(`Error analyzing tweets for @${cleanUsername}:`, error)
+    logger.error(`Error analyzing LinkedIn posts for ${cleanLinkedInUrl}:`, error)
+    // Add more detailed error information
+    if (error instanceof Error) {
+      logger.error(`Error details: ${error.message}`)
+      logger.error(`Error stack: ${error.stack}`)
+    }
+    
+    // Try to log more specific error information based on where it might have occurred
+    try {
+      const profile = await fetchLinkedInProfile(cleanLinkedInUrl)
+      logger.info(`LinkedIn profile fetch attempt during error handling:`, { 
+        success: !!profile,
+        postsCount: profile?.posts?.length || 0 
+      })
+    } catch (fetchError) {
+      logger.error(`Error during LinkedIn profile fetch: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`)
+    }
+
     return {
       lawfulChaotic: 0,
       goodEvil: 0,
-      explanation: `Error analyzing tweets for @${cleanUsername}... Check you used a valid username and try again later.`,
+      explanation: `Error analyzing LinkedIn posts for ${cleanLinkedInUrl}... Check you used a valid LinkedIn URL and try again later.`,
       cached: false,
       isError: true,
     }
