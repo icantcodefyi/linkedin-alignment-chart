@@ -516,7 +516,7 @@ export default function AlignmentChart() {
             disabled={isAnalyzing}
           />
           <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex space-x-1">
-            <TooltipProvider>
+            {/* <TooltipProvider>
               <Tooltip delayDuration={100}>
                 <TooltipTrigger asChild>
                   <Button
@@ -534,7 +534,7 @@ export default function AlignmentChart() {
                   <p>Randomly place a user on the chart</p>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
+            </TooltipProvider> */}
 
             <TooltipProvider>
               <Tooltip delayDuration={100}>
