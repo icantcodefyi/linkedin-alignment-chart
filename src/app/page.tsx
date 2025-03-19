@@ -278,8 +278,7 @@ export default function AlignmentChart() {
 
     setIsAnalyzing(true);
 
-    const cleanLinkedInUrl = linkedInUrl.trim();
-    const profileId = cleanLinkedInUrl.split('/').pop() || cleanLinkedInUrl;
+    const username = linkedInUrl.trim();
 
     try {
       const tempImageId = `image-${Date.now()}`;
@@ -289,7 +288,7 @@ export default function AlignmentChart() {
         position: getRandomPosition(),
         isDragging: false,
         loading: true,
-        username: profileId,
+        username: username,
         isAiPlaced: true,
         timestamp: new Date(),
       };
@@ -297,7 +296,7 @@ export default function AlignmentChart() {
       setImages((prev) => [...prev, tempImage]);
       setLinkedInUrl("");
 
-      const analysis = await analyseUser(cleanLinkedInUrl);
+      const analysis = await analyseUser(username);
       if (analysis.isError) {
         toast.error(`Error`, {
           description: analysis.explanation,
@@ -306,16 +305,16 @@ export default function AlignmentChart() {
         });
 
         setImages((prev) =>
-          prev.filter((img) => img.username !== profileId)
+          prev.filter((img) => img.username !== username)
         );
         return;
       }
       const position = alignmentToPosition(analysis);
 
       // Use author image from LinkedIn if available
-      const authorImage = analysis.authorImage || `/grid.svg?height=100&width=100&text=${profileId.slice(0, 2).toUpperCase()}`;
+      const authorImage = analysis.authorImage || `/grid.svg?height=100&width=100&text=${username.slice(0, 2).toUpperCase()}`;
       // Use author name if available, otherwise use profile ID
-      const displayName = analysis.authorName || profileId;
+      const displayName = analysis.authorName || username;
 
       setImages((prev) =>
         prev.map((img) =>
@@ -342,10 +341,10 @@ export default function AlignmentChart() {
     } catch (error) {
       logger.error("Error auto-analyzing:", error);
 
-      setImages((prev) => prev.filter((img) => img.username !== profileId));
+      setImages((prev) => prev.filter((img) => img.username !== username));
 
       toast.error(`Error`, {
-        description: `Couldn't analyze LinkedIn profile ${cleanLinkedInUrl}: ${
+        description: `Couldn't analyze LinkedIn profile ${username}: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
         position: "top-right",
@@ -507,7 +506,7 @@ export default function AlignmentChart() {
           }}
         >
           <Input
-            placeholder="Enter LinkedIn URL"
+            placeholder="Enter LinkedIn Username"
             value={linkedInUrl}
             onChange={(e) => setLinkedInUrl(e.target.value)}
             className="pr-20 rounded-full pl-4"

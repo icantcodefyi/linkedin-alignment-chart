@@ -20,35 +20,37 @@ const AlignmentSchema = z.object({
 
 export type AlignmentAnalysis = z.infer<typeof AlignmentSchema>
 
-export async function analyseUser(linkedInUrl: string): Promise<AlignmentAnalysis & { cached: boolean; isError: boolean }> {
-  const cleanLinkedInUrl = linkedInUrl.trim()
-  const cacheKey = `analysis-linkedin-v1:${cleanLinkedInUrl}`
+export async function analyseUser(username: string): Promise<AlignmentAnalysis & { cached: boolean; isError: boolean }> {
+  // Construct LinkedIn URL from username
+  const cleanUsername = username.trim().replace(/^@/, "");
+  const linkedInUrl = `https://www.linkedin.com/in/${cleanUsername}`;
+  const cacheKey = `analysis-linkedin-v1:${linkedInUrl}`;
 
   try {
-    const cachedAnalysis = await getCachedData<AlignmentAnalysis>(cacheKey)
+    const cachedAnalysis = await getCachedData<AlignmentAnalysis>(cacheKey);
 
     if (cachedAnalysis) {
-      logger.info(`Using cached analysis for ${cleanLinkedInUrl}`)
-      logger.info(cachedAnalysis)
+      logger.info(`Using cached analysis for ${linkedInUrl}`);
+      logger.info(cachedAnalysis);
 
       waitUntil(track("analysis_cached", {
-        linkedInUrl: cleanLinkedInUrl,
+        linkedInUrl: linkedInUrl,
         lawful_chaotic: cachedAnalysis.lawfulChaotic,
         good_evil: cachedAnalysis.goodEvil,
-      }))
-      return { ...cachedAnalysis, cached: true, isError: false }
+      }));
+      return { ...cachedAnalysis, cached: true, isError: false };
     }
 
-    logger.info(`Analyzing LinkedIn posts for ${cleanLinkedInUrl}`)
+    logger.info(`Analyzing LinkedIn posts for ${linkedInUrl}`);
 
-    const profile = await fetchLinkedInProfile(cleanLinkedInUrl)
-    logger.info(`Profile fetched for ${cleanLinkedInUrl}:`, { 
+    const profile = await fetchLinkedInProfile(linkedInUrl);
+    logger.info(`Profile fetched for ${linkedInUrl}:`, { 
       success: !!profile,
       postsCount: profile?.posts?.length || 0
     })
     
     if (!profile) {
-      throw new Error(`No profile found for ${cleanLinkedInUrl}`)
+      throw new Error(`No profile found for ${linkedInUrl}`)
     }
 
     // Extract author image and name from the first post if available
@@ -99,7 +101,7 @@ ${post.activityDate}
       {
         role: "user",
         content:
-          dedent`LinkedIn URL: ${linkedInUrl}
+          dedent`LinkedIn Username: ${cleanUsername}
 
 <user_posts>
 ${postTexts}
@@ -126,14 +128,14 @@ ${postTexts}
     await setCachedData(cacheKey, analysisWithImage, 604_800)
 
     waitUntil(track("analysis_complete", {
-      linkedInUrl: cleanLinkedInUrl,
+      linkedInUrl: linkedInUrl,
       lawful_chaotic: object.lawfulChaotic,
       good_evil: object.goodEvil,
     }))
 
     return { ...analysisWithImage, cached: false, isError: false }
   } catch (error) {
-    logger.error(`Error analyzing LinkedIn posts for ${cleanLinkedInUrl}:`, error)
+    logger.error(`Error analyzing LinkedIn posts for ${linkedInUrl}:`, error)
     // Add more detailed error information
     if (error instanceof Error) {
       logger.error(`Error details: ${error.message}`)
@@ -142,7 +144,7 @@ ${postTexts}
     
     // Try to log more specific error information based on where it might have occurred
     try {
-      const profile = await fetchLinkedInProfile(cleanLinkedInUrl)
+      const profile = await fetchLinkedInProfile(linkedInUrl)
       logger.info(`LinkedIn profile fetch attempt during error handling:`, { 
         success: !!profile,
         postsCount: profile?.posts?.length || 0 
@@ -154,7 +156,7 @@ ${postTexts}
     return {
       lawfulChaotic: 0,
       goodEvil: 0,
-      explanation: `Error analyzing LinkedIn posts for ${cleanLinkedInUrl}... Check you used a valid LinkedIn URL and try again later.`,
+      explanation: `Error analyzing LinkedIn profile for username '${cleanUsername}'... Please check that you entered a valid LinkedIn username and try again later.`,
       cached: false,
       isError: true,
     }
