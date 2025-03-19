@@ -2,16 +2,16 @@
 
 Create D&D-style alignment charts for X (formerly Twitter) users. Place users on a Lawful-Chaotic and Good-Evil grid based on an AI analysis of their tweets or manually position them. Powered by [Scrapin](https://scrapin.io/) and [Vercel AI SDK](https://sdk.vercel.ai).
 
-Try it here! → [magic-x-alignment-chart.vercel.app](https://dub.sh/linkedin-alignment)
+Try it here! → [linkedin-alignment-chart.vercel.app](https://dub.sh/linkedin-alignment)
 
-https://github.com/user-attachments/assets/2e5e2587-468e-4a77-ac59-742c92f8d58a
+https://github.com/user-attachments/assets/a9966736-7024-4b40-b3ea-629e836e144b
 
 ## Tutorial
 
 1. Enter an Linkedin username in the input field
 2. Choose between:
    - **AI Analysis** (purple button): Analyzes the user's tweets and places them on the chart
-   - **Random Placement** (black button): Places the user randomly on the chart for manual positioning
+   - **Random Placement** (black button): Places the user randomly on the chart for manual positioning ( doesn;t work because linkedin sucks )
 3. View the alignment chart with positioned users
 4. Drag unlocked users to reposition them (AI-placed users are locked)
 5. Click on chart axis labels to learn more about each alignment
